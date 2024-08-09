@@ -1,0 +1,17 @@
+These are the artifcats for the ProTools 2024 paper submission
+	Performance Measurement on Heterogeneous Processors with PAPI
+
+mon_hpl
+	data and tools for making the Raptor Lake results
+
+orangepi-frequency-graph
+	data used for making OrangePi frequency graph
+
+orangepi-hpl-graph
+	programs and data used for making the HPL OrangePi Graph
+
+patches
+	patches to libpfm4, PAPI, etc, to enable heterogeoens support
+
+papi_tests
+	PAPI tests used for testing heterogeneous support

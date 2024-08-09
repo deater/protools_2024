@@ -1,0 +1,25 @@
+patches useful for getting hybrid/hetereogeneous PAPI working
+
+note: the patches are preliminary and not necessarily meant for applying
+	upstream
+
+patch.papi.hybrid
+	patch to current github PAPI as of 6 August 2024
+	modifies perf_event component so events from multiple
+		perf PMUs can be used
+	papi needs to be configured with
+		./configure --disable-perf-event-uncore --disable-perfevent-rdpmc
+	some other things might break, but returns proper results on
+		raptorlake and orangepi 800
+
+patch.libpfm4.cortexa72  
+	adds support for ARM Cortex-A72 as found in Raspberry Pi 4 and
+	orangepi 800
+
+patch.libpfm4.biglittle
+	enables libpfm4 to properly detect multiple CPUs in big.LITTLE system
+	support only tested on oragepi 800 (Cortex-A53+Cortex-A72)
+
+
+
+

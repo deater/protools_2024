@@ -1,0 +1,18 @@
+# started on Tue Jul 30 11:38:26 2024
+
+{"counter-value" : "381849484.000000", "unit" : "", "event" : "cpu_core/LLC-stores/", "event-runtime" : 1903565823017, "pcnt-running" : 75.00, "metric-value" : 0.000000, "metric-unit" : "(null)"}
+{"counter-value" : "1100602714.000000", "unit" : "", "event" : "cpu_atom/LLC-stores/", "event-runtime" : 342238, "pcnt-running" : 0.00, "metric-value" : 0.000000, "metric-unit" : "(null)"}
+{"counter-value" : "308274367.000000", "unit" : "", "event" : "cpu_core/LLC-store-misses/", "event-runtime" : 1903534107722, "pcnt-running" : 74.00, "metric-value" : 0.000000, "metric-unit" : "(null)"}
+{"counter-value" : "8309919.000000", "unit" : "", "event" : "cpu_atom/LLC-store-misses/", "event-runtime" : 342238, "pcnt-running" : 0.00, "metric-value" : 0.000000, "metric-unit" : "(null)"}
+{"counter-value" : "378190833.000000", "unit" : "", "event" : "cpu_core/LLC-loads/", "event-runtime" : 634491924119, "pcnt-running" : 24.00, "metric-value" : 0.000000, "metric-unit" : "(null)"}
+{"counter-value" : "<not counted>", "unit" : "", "event" : "cpu_atom/LLC-loads/", "event-runtime" : 0, "pcnt-running" : 0.00, "metric-value" : 0.000000, "metric-unit" : ""}
+{"counter-value" : "262817211.000000", "unit" : "", "event" : "cpu_core/LLC-load-misses/", "event-runtime" : 634523639414, "pcnt-running" : 25.00, "metric-value" : 0.000000, "metric-unit" : "(null)"}
+{"counter-value" : "<not counted>", "unit" : "", "event" : "cpu_atom/LLC-load-misses/", "event-runtime" : 0, "pcnt-running" : 0.00, "metric-value" : 0.000000, "metric-unit" : ""}
+{"counter-value" : "48000283533.000000", "unit" : "", "event" : "cpu_core/cache-misses/", "event-runtime" : 951794137917, "pcnt-running" : 37.00, "metric-value" : 0.000000, "metric-unit" : "(null)"}
+{"counter-value" : "<not counted>", "unit" : "", "event" : "cpu_atom/cache-misses/", "event-runtime" : 0, "pcnt-running" : 0.00, "metric-value" : 0.000000, "metric-unit" : ""}
+{"counter-value" : "1008397615.000000", "unit" : "", "event" : "cpu_core/branch-misses/", "event-runtime" : 1269062077134, "pcnt-running" : 50.00, "metric-value" : 0.000000, "metric-unit" : "(null)"}
+{"counter-value" : "<not counted>", "unit" : "", "event" : "cpu_atom/branch-misses/", "event-runtime" : 0, "pcnt-running" : 0.00, "metric-value" : 0.000000, "metric-unit" : ""}
+{"counter-value" : "29679068300577.000000", "unit" : "", "event" : "cpu_core/instructions/", "event-runtime" : 1586329023006, "pcnt-running" : 62.00, "metric-value" : 0.000000, "metric-unit" : "(null)"}
+{"counter-value" : "<not counted>", "unit" : "", "event" : "cpu_atom/instructions/", "event-runtime" : 0, "pcnt-running" : 0.00, "metric-value" : 0.000000, "metric-unit" : ""}
+{"counter-value" : "8029904115790.000000", "unit" : "", "event" : "cpu_core/cpu-cycles/", "event-runtime" : 1903592368686, "pcnt-running" : 75.00, "metric-value" : 0.000000, "metric-unit" : "(null)"}
+{"counter-value" : "<not counted>", "unit" : "", "event" : "cpu_atom/cpu-cycles/", "event-runtime" : 0, "pcnt-running" : 0.00, "metric-value" : 0.000000, "metric-unit" : ""}

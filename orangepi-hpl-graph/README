@@ -1,0 +1,9 @@
+These are the results, including the hpl binary, for gathering
+the HPL results for the graph in the paper
+
+the raw_data directory contains the results for the runs, and includes
+	the binary used for gathering the info
+
+The system setup is the same as that used for the other orangepi
+	frequency results
+

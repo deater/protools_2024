@@ -1,0 +1,490 @@
+diff --git a/src/components/perf_event/pe_libpfm4_events.c b/src/components/perf_event/pe_libpfm4_events.c
+index 9d4c4f08b..25feb3429 100644
+--- a/src/components/perf_event/pe_libpfm4_events.c
++++ b/src/components/perf_event/pe_libpfm4_events.c
+@@ -1288,9 +1288,14 @@ _pe_libpfm4_init(papi_vector_t *component, int cidx,
+ 				else {
+ 					/* Actually set the PMU as the default one */
+ 
+-					memcpy(&(event_table->default_pmu),
+-						&pinfo,sizeof(pfm_pmu_info_t));
+-					found_default++;
++					if (found_default) {
++						printf("VMW: too many default PMUs!\n");
++					}
++					else {
++						memcpy(&(event_table->default_pmu),
++							&pinfo,sizeof(pfm_pmu_info_t));
++						found_default++;
++					}
+ 				}
+ 
+ 
+diff --git a/src/components/perf_event/perf_event.c b/src/components/perf_event/perf_event.c
+index 7c16b6d0c..2449a59f1 100644
+--- a/src/components/perf_event/perf_event.c
++++ b/src/components/perf_event/perf_event.c
+@@ -23,6 +23,8 @@
+ */
+ 
+ 
++static int vmw_debug=0;
++
+ #include <fcntl.h>
+ #include <string.h>
+ #include <errno.h>
+@@ -519,7 +521,7 @@ check_scheduability( pe_context_t *ctx, pe_control_t *ctl, int idx )
+    /* to be scheduled and see if an error condition happens. */
+ 
+    /* get the proper fd to start */
+-   group_leader_fd=ctl->events[idx].group_leader_fd;
++   group_leader_fd=ctl->leaders[ctl->events[idx].group_leader].fd;
+    if (group_leader_fd==-1) group_leader_fd=ctl->events[idx].event_fd;
+ 
+    /* start the event */
+@@ -695,14 +697,14 @@ open_pe_events( pe_context_t *ctx, pe_control_t *ctl )
+ 
+ 	int i, ret = PAPI_OK;
+ 	long pid;
+-
++	int group_leader_fd;
+ 
+ 	/* Set the pid setting */
+ 	/* If attached, this is the pid of process we are attached to. */
+ 	/* If GRN_THRD then it is 0 meaning current process only */
+ 	/* If GRN_SYS then it is -1 meaning all procs on this CPU */
+ 	/* Note if GRN_SYS then CPU must be specified, not -1 */
+-
++if (vmw_debug) printf("VMW: open_pe_events\n");
+ 	if (ctl->attached) {
+ 		pid = ctl->tid;
+ 	}
+@@ -736,9 +738,10 @@ open_pe_events( pe_context_t *ctx, pe_control_t *ctl )
+ 			ctl->events[i].attr.exclude_guest=0;
+ 		}
+ 
+-		/* group leader (event 0) is special                */
++		/* see if we need to open the group leader for this type */
+ 		/* If we're multiplexed, everyone is a group leader */
+-		if (( i == 0 ) || (ctl->multiplexed)) {
++		if ((ctl->leaders[ctl->events[i].group_leader].fd==-1) ||
++			(ctl->multiplexed)) {
+ 			ctl->events[i].attr.pinned = !ctl->multiplexed;
+ 			ctl->events[i].attr.disabled = 1;
+ #if defined(__aarch64__)
+@@ -746,11 +749,12 @@ open_pe_events( pe_context_t *ctx, pe_control_t *ctl )
+ 				arm64_request_user_access(&ctl->events[i].attr);
+ 			}
+ #endif
+-			ctl->events[i].group_leader_fd=-1;
++			group_leader_fd=-1;
+ 			ctl->events[i].attr.read_format = get_read_format(
+ 							ctl->multiplexed,
+ 							ctl->inherit,
+-							!ctl->multiplexed );
++							0);
++// ???							!ctl->multiplexed );
+ 		} else {
+ 			ctl->events[i].attr.pinned=0;
+ 			ctl->events[i].attr.disabled = 0;
+@@ -759,7 +763,8 @@ open_pe_events( pe_context_t *ctx, pe_control_t *ctl )
+ 				arm64_request_user_access(&ctl->events[i].attr);
+ 			}
+ #endif
+-			ctl->events[i].group_leader_fd=ctl->events[0].event_fd;
++			group_leader_fd=ctl->leaders[ctl->events[i].group_leader].fd;
++//			ctl->events[i].group_leader_fd=ctl->events[0].event_fd;
+ 			ctl->events[i].attr.read_format = get_read_format(
+ 							ctl->multiplexed,
+ 							ctl->inherit,
+@@ -771,16 +776,18 @@ open_pe_events( pe_context_t *ctx, pe_control_t *ctl )
+ 				&ctl->events[i].attr,
+ 				pid,
+ 				ctl->events[i].cpu,
+-				ctl->events[i].group_leader_fd,
++				group_leader_fd,
+ 				0 /* flags */ );
+ 
+ 		ctl->events[i].event_fd = sys_perf_event_open(
+ 				&ctl->events[i].attr,
+ 				pid,
+ 				ctl->events[i].cpu,
+-				ctl->events[i].group_leader_fd,
++				group_leader_fd,
+ 				0 /* flags */ );
+ 
++if (vmw_debug) printf("VMW: open_pe_events: opened %d, result = %d\n",
++			i,ctl->events[i].event_fd);
+ 		/* Try to match Linux errors to PAPI errors */
+ 		if ( ctl->events[i].event_fd == -1 ) {
+ 			SUBDBG("sys_perf_event_open returned error "
+@@ -795,11 +802,14 @@ open_pe_events( pe_context_t *ctx, pe_control_t *ctl )
+ 			" group_leader/fd: %d, event_fd: %d,"
+ 			" read_format: %"PRIu64"\n",
+ 			pid, ctl->events[i].cpu,
+-			ctl->events[i].group_leader_fd,
++			group_leader_fd,
+ 			ctl->events[i].event_fd,
+ 			ctl->events[i].attr.read_format);
+ 
+-
++		if (group_leader_fd==-1) {
++			ctl->leaders[ctl->events[i].group_leader].fd=
++				ctl->events[i].event_fd;
++		}
+ 		/* in many situations the kernel will indicate we opened fine */
+ 		/* yet things will fail later.  So we need to double check    */
+ 		/* we actually can use the events we've set up.               */
+@@ -950,17 +960,17 @@ close_pe_events( pe_context_t *ctx, pe_control_t *ctl )
+ 	/* Is that necessary? -- vmw */
+ 	for( i=0; i<ctl->num_events; i++ ) {
+ 		if (ctl->events[i].event_opened) {
+-			if (ctl->events[i].group_leader_fd!=-1) {
++//			if (ctl->events[i].group_leader_fd!=-1) {
+ 				result=close_event(&ctl->events[i]);
+ 				if (result!=0) return result;
+ 				else num_closed++;
+-			}
++//			}
+ 		}
+ 		else {
+ 			events_not_opened++;
+ 		}
+ 	}
+-
++#if 0
+ 	/* Close the group leaders last */
+ 	for( i=0; i<ctl->num_events; i++ ) {
+ 		if (ctl->events[i].event_opened) {
+@@ -971,7 +981,7 @@ close_pe_events( pe_context_t *ctx, pe_control_t *ctl )
+ 			}
+ 		}
+ 	}
+-
++#endif
+ 	if (ctl->num_events!=num_closed) {
+ 		if (ctl->num_events!=(num_closed+events_not_opened)) {
+ 			PAPIERROR("Didn't close all events: "
+@@ -1259,12 +1269,17 @@ _pe_read_nogroup( pe_control_t *pe_ctl ) {
+ 	int i,ret=-1;
+ 	long long papi_pe_buffer[READ_BUFFER_SIZE];
+ 
++if (vmw_debug) printf("VMW: pe_read_nogroup: reading %d events\n",
++		pe_ctl->num_events);
++
+ 	/* we must read each counter individually */
+ 	for ( i = 0; i < pe_ctl->num_events; i++ ) {
++if (vmw_debug) printf("VMW: reading event %d (%d)\n",i,pe_ctl->events[i].event_fd);
+ 		ret = read( pe_ctl->events[i].event_fd,
+ 				papi_pe_buffer,
+ 				sizeof ( papi_pe_buffer ) );
+ 		if ( ret == -1 ) {
++if (vmw_debug) printf("VMW: Read returned error!\n");
+ 			PAPIERROR("read returned an error: %s",
+ 				strerror( errno ));
+ 			return PAPI_ESYS;
+@@ -1272,11 +1287,12 @@ _pe_read_nogroup( pe_control_t *pe_ctl ) {
+ 
+ 		/* we should read one 64-bit value from each counter */
+ 		if (ret!=sizeof(long long)) {
+-			PAPIERROR("Error!  short read");
+-			PAPIERROR("read: fd: %2d, tid: %ld, cpu: %d, ret: %d",
+-				pe_ctl->events[i].event_fd,
+-				(long)pe_ctl->tid, pe_ctl->events[i].cpu, ret);
+-			return PAPI_ESYS;
++if (vmw_debug) printf("VMW: Read returned wrong size %d!\n",ret);
++//			PAPIERROR("Error!  short read");
++//			PAPIERROR("read: fd: %2d, tid: %ld, cpu: %d, ret: %d",
++//				pe_ctl->events[i].event_fd,
++//				(long)pe_ctl->tid, pe_ctl->events[i].cpu, ret);
++//			return PAPI_ESYS;
+ 		}
+ 
+ 		SUBDBG("read: fd: %2d, tid: %ld, cpu: %d, ret: %d\n",
+@@ -1284,6 +1300,7 @@ _pe_read_nogroup( pe_control_t *pe_ctl ) {
+ 			pe_ctl->events[i].cpu, ret);
+ 		SUBDBG("read: %lld\n",papi_pe_buffer[0]);
+ 
++if (vmw_debug) printf("VMW: Read values %lld %lld!\n",papi_pe_buffer[0],papi_pe_buffer[1]);
+ 		pe_ctl->counts[i] = papi_pe_buffer[0];
+ 	}
+ 
+@@ -1305,6 +1322,8 @@ _pe_read( hwd_context_t *ctx, hwd_control_state_t *ctl,
+ 	long long papi_pe_buffer[READ_BUFFER_SIZE];
+ 	int result;
+ 
++if (vmw_debug) printf("VMW: pe_read\n");
++
+ 	/* Handle fast case */
+ 	/* FIXME: we fallback to slow reads if *any* event in eventset fails */
+ 	/*        in theory we could only fall back for the one event        */
+@@ -1336,6 +1355,9 @@ _pe_read( hwd_context_t *ctx, hwd_control_state_t *ctl,
+ 	/* events, followed by the counts for them.               */
+ 
+ 	else {
++		_pe_read_nogroup(pe_ctl);
++	}
++#if 0
+ 		if (pe_ctl->events[0].group_leader_fd!=-1) {
+ 			PAPIERROR("Was expecting group leader");
+ 		}
+@@ -1376,7 +1398,7 @@ _pe_read( hwd_context_t *ctx, hwd_control_state_t *ctl,
+ 			pe_ctl->counts[i] = papi_pe_buffer[1+i];
+ 		}
+ 	}
+-
++#endif
+ 	/* point PAPI to the values we read */
+ 	*events = pe_ctl->counts;
+ 
+@@ -1452,7 +1474,9 @@ _pe_start( hwd_context_t *ctx, hwd_control_state_t *ctl )
+ 	int did_something = 0;
+ 	pe_context_t *pe_ctx = ( pe_context_t *) ctx;
+ 	pe_control_t *pe_ctl = ( pe_control_t *) ctl;
++	int which_fd;
+ 
++if (vmw_debug) printf("VMW: resetting\n");
+ 	/* Reset the counters first.  Is this necessary? */
+ 	ret = _pe_reset( pe_ctx, pe_ctl );
+ 	if ( ret ) {
+@@ -1461,6 +1485,39 @@ _pe_start( hwd_context_t *ctx, hwd_control_state_t *ctl )
+ 
+ 	/* Enable all of the group leaders                */
+ 	/* All group leaders have a group_leader_fd of -1 */
++
++if (vmw_debug) printf("VMW: debug leaders\n");
++	for(i=0;i<pe_ctl->num_leaders;i++ ){
++if (vmw_debug) printf("Leader %d, fd=%d\n",i,pe_ctl->leaders[i].fd);
++	}
++
++	for( i = 0; i < pe_ctl->num_leaders; i++ ) {
++		which_fd=pe_ctl->leaders[i].fd;
++
++if (vmw_debug) printf("enabling group %d fd %d\n",
++				i,which_fd);
++
++			SUBDBG("ioctl(enable): fd: %d\n",
++				which_fd);
++			ret=ioctl( which_fd,
++				PERF_EVENT_IOC_ENABLE, NULL) ;
++			if (_perf_event_vector.cmp_info.fast_counter_read) {
++				pe_ctl->reset_counts[i] = 0LL;
++				pe_ctl->reset_flag = 0;
++			}
++
++			/* ioctls always return -1 on failure */
++			if (ret == -1) {
++				PAPIERROR("ioctl(PERF_EVENT_IOC_ENABLE) failed");
++				return PAPI_ESYS;
++			}
++
++			did_something++;
++
++	}
++
++
++#if 0
+ 	for( i = 0; i < pe_ctl->num_events; i++ ) {
+ 		if (pe_ctl->events[i].group_leader_fd == -1) {
+ 			SUBDBG("ioctl(enable): fd: %d\n",
+@@ -1481,6 +1538,7 @@ _pe_start( hwd_context_t *ctx, hwd_control_state_t *ctl )
+ 			did_something++;
+ 		}
+ 	}
++#endif
+ 
+ 	if (!did_something) {
+ 		PAPIERROR("Did not enable any counters");
+@@ -1503,8 +1561,23 @@ _pe_stop( hwd_context_t *ctx, hwd_control_state_t *ctl )
+ 	int i;
+ 	pe_context_t *pe_ctx = ( pe_context_t *) ctx;
+ 	pe_control_t *pe_ctl = ( pe_control_t *) ctl;
++	int which_fd;
+ 
+ 	/* Just disable the group leaders */
++	for ( i = 0; i < pe_ctl->num_leaders; i++ ) {
++		which_fd=pe_ctl->leaders[i].fd;
++
++			ret=ioctl( which_fd,
++				PERF_EVENT_IOC_DISABLE, NULL);
++			if ( ret == -1 ) {
++				PAPIERROR( "ioctl(%d, PERF_EVENT_IOC_DISABLE, NULL) "
++					"returned error, Linux says: %s",
++					which_fd, strerror( errno ) );
++				return PAPI_EBUG;
++			}
++
++	}
++#if 0
+ 	for ( i = 0; i < pe_ctl->num_events; i++ ) {
+ 		if ( pe_ctl->events[i].group_leader_fd == -1 ) {
+ 			ret=ioctl( pe_ctl->events[i].event_fd,
+@@ -1517,6 +1590,7 @@ _pe_stop( hwd_context_t *ctx, hwd_control_state_t *ctl )
+ 			}
+ 		}
+ 	}
++#endif
+ 
+ 	pe_ctx->state &= ~PERF_EVENTS_RUNNING;
+ 
+@@ -1545,6 +1619,7 @@ _pe_update_control_state( hwd_control_state_t *ctl,
+ 		ctl, native, count, ctx);
+ 	int i;
+ 	int j;
++	int l;
+ 	int ret;
+ 	int skipped_events=0;
+ 	struct native_event_t *ntv_evt;
+@@ -1554,8 +1629,18 @@ _pe_update_control_state( hwd_control_state_t *ctl,
+ 	/* close all of the existing fds and start over again */
+ 	/* In theory we could have finer-grained control and know if             */
+ 	/* things were changed, but it's easier to tear things down and rebuild. */
++if (vmw_debug) printf("VMW: update_control_state: closing events\n");
+ 	close_pe_events( pe_ctx, pe_ctl );
+ 
++if (vmw_debug) printf("VMW: update_control_state: clearing leaders\n");
++	/* clear out the leaders struct */
++	pe_ctl->num_leaders=0;
++	for (l=0;l<PERF_EVENT_MAX_MPX_COUNTERS;l++) {
++		pe_ctl->leaders[l].type=-1;
++		pe_ctl->leaders[l].fd=-1;
++	}
++
++
+ 	/* Calling with count==0 should be OK, it's how things are deallocated */
+ 	/* when an eventset is destroyed.                                      */
+ 	if ( count == 0 ) {
+@@ -1563,6 +1648,8 @@ _pe_update_control_state( hwd_control_state_t *ctl,
+ 		return PAPI_OK;
+ 	}
+ 
++if (vmw_debug) printf("VMW: update_control_state: setting up events\n");
++
+ 	/* set up all the events */
+ 	for( i = 0; i < count; i++ ) {
+ 		if ( native ) {
+@@ -1629,22 +1716,45 @@ _pe_update_control_state( hwd_control_state_t *ctl,
+ 			if (pe_ctl->events[i].cpu == -1) {
+ 				pe_ctl->events[i].cpu = pe_ctl->cpu;
+ 			}
+-      } else {
+-    	  /* This case happens when called from _pe_set_overflow and _pe_ctl */
+-          /* Those callers put things directly into the pe_ctl structure so it is already set for the open call */
+-      }
++		} else {
++    	  		/* This case happens when called from _pe_set_overflow and _pe_ctl */
++			/* Those callers put things directly into the pe_ctl structure so it is already set for the open call */
++		}
+ 
+-      /* Copy the inherit flag into the attribute block that will be passed to the kernel */
+-      pe_ctl->events[i].attr.inherit = pe_ctl->inherit;
++		/* Copy the inherit flag into the attribute block that will be passed to the kernel */
++		pe_ctl->events[i].attr.inherit = pe_ctl->inherit;
+ 
+-      /* Set the position in the native structure */
+-      /* We just set up events linearly           */
+-      if ( native ) {
+-    	  native[i].ni_position = i;
+-    	  SUBDBG( "&native[%d]: %p, ni_papi_code: %#x, ni_event: %#x, ni_position: %d, ni_owners: %d\n",
+-			i, &(native[i]), native[i].ni_papi_code, native[i].ni_event, native[i].ni_position, native[i].ni_owners);
+-      }
+-   }
++		/* add to leader structure */
++if (vmw_debug) printf("VMW: ucs: Adding event in PMU type %d\n",pe_ctl->events[i].attr.type);
++		for(l=0;l<pe_ctl->num_leaders;l++) {
++			if (pe_ctl->leaders[l].type==pe_ctl->events[i].attr.type) {
++				pe_ctl->events[i].group_leader=l;
++if (vmw_debug) printf("VMW: ucs: found existing leader!\n");
++				break;
++			}
++		}
++		/* didn't find it */
++		if (l==pe_ctl->num_leaders) {
++			if (pe_ctl->num_leaders==PERF_EVENT_MAX_MPX_COUNTERS-1) {
++if (vmw_debug) printf("VMW: ucs: too many leaders\n");
++				/* FIXME: Return error */
++			}
++			pe_ctl->leaders[l].type=pe_ctl->events[i].attr.type;
++			pe_ctl->events[i].group_leader=l;
++			pe_ctl->num_leaders++;
++if (vmw_debug) printf("VMW: ucs: added type %d, total now %d\n",
++				pe_ctl->leaders[l].type,pe_ctl->num_leaders);
++		}
++
++
++		/* Set the position in the native structure */
++		/* We just set up events linearly           */
++		if ( native ) {
++			native[i].ni_position = i;
++			SUBDBG( "&native[%d]: %p, ni_papi_code: %#x, ni_event: %#x, ni_position: %d, ni_owners: %d\n",
++				i, &(native[i]), native[i].ni_papi_code, native[i].ni_event, native[i].ni_position, native[i].ni_owners);
++		}
++	}
+ 
+ 	if (count <= skipped_events) {
+ 		SUBDBG("EXIT: No events to count, they all contained invalid umasks\n");
+@@ -1654,6 +1764,7 @@ _pe_update_control_state( hwd_control_state_t *ctl,
+ 	pe_ctl->num_events = count - skipped_events;
+ 
+ 	/* actually open the events */
++if (vmw_debug) printf("VMW: ucs: opening_events\n");
+ 	ret = open_pe_events( pe_ctx, pe_ctl );
+ 	if ( ret != PAPI_OK ) {
+ 		SUBDBG("EXIT: open_pe_events returned: %d\n", ret);
+@@ -1842,11 +1953,21 @@ _pe_ctl( hwd_context_t *ctx, int code, _papi_int_option_t *option )
+ static int
+ _pe_init_control_state( hwd_control_state_t *ctl )
+ {
++
++	int l;
++
+ 	pe_control_t *pe_ctl = ( pe_control_t *) ctl;
+ 
+ 	/* clear the contents */
+ 	memset( pe_ctl, 0, sizeof ( pe_control_t ) );
+ 
++	/* clear leaders struct */
++	pe_ctl->num_leaders=0;
++	for (l=0;l<PERF_EVENT_MAX_MPX_COUNTERS;l++) {
++		pe_ctl->leaders[l].type=-1;
++		pe_ctl->leaders[l].fd=-1;
++	}
++
+ 	/* Set the domain */
+ 	_pe_set_domain( ctl, _perf_event_vector.cmp_info.default_domain );
+ 
+diff --git a/src/components/perf_event/perf_event_lib.h b/src/components/perf_event/perf_event_lib.h
+index cfba8ac49..d7ec2778a 100644
+--- a/src/components/perf_event/perf_event_lib.h
++++ b/src/components/perf_event/perf_event_lib.h
+@@ -8,7 +8,9 @@
+ 
+ typedef struct
+ {
+-  int group_leader_fd;            /* fd of group leader                   */
++  int group_leader;                /* which group we belong to */
++	/* FIXME, is below needed? */
++//  int group_leader_fd;            /* fd of group leader                   */
+   int event_fd;                   /* fd of event                          */
+   int event_opened;               /* event successfully opened            */
+   int profiling;                  /* event is profiling                   */
+@@ -21,6 +23,10 @@ typedef struct
+   struct perf_event_attr attr;    /* perf_event config structure          */
+ } pe_event_info_t;
+ 
++struct leader_type {
++	int type;
++	int fd;
++};
+ 
+ typedef struct {
+   int num_events;                 /* number of events in control state */
+@@ -38,6 +44,8 @@ typedef struct {
+   long long counts[PERF_EVENT_MAX_MPX_COUNTERS];
+   unsigned int reset_flag;
+   long long reset_counts[PERF_EVENT_MAX_MPX_COUNTERS];
++  int num_leaders;
++  struct leader_type leaders[PERF_EVENT_MAX_MPX_COUNTERS];
+ } pe_control_t;
+ 
+ 

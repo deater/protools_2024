@@ -1,0 +1,6 @@
+test program used to test PAPI heterogeneous support on both
+Raptor Lake and OrangePi big.LITTLE
+
+this program is included with the perf_event_tests testsuite which
+can be found here:
+	https://github.com/deater/perf_event_tests

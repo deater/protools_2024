@@ -1,0 +1,180 @@
+diff --git a/lib/pfmlib_arm.c b/lib/pfmlib_arm.c
+index 67efaeb..1cf831a 100644
+--- a/lib/pfmlib_arm.c
++++ b/lib/pfmlib_arm.c
+@@ -86,7 +86,7 @@ pfmlib_getcpuinfo_attr(const char *attr, char *ret_buf, size_t maxlen)
+ 			goto error;
+ 
+ 		/*
+-		 * p+2: +1 = space, +2= firt character
++		 * p+2: +1 = space, +2= first character
+ 		 * strlen()-1 gets rid of \n
+ 		 */
+ 		*p = '\0';
+@@ -105,12 +105,79 @@ error:
+ 	fclose(fp);
+ 	return ret;
+ }
++
++int
++pfm_arm_detect_cpu(int implementer, int part)
++{
++
++	FILE *fp = NULL;
++	int ret = PFM_ERR_NOTSUPP;
++	char *buffer;
++	size_t buf_len = 0;
++	char *p, *value = NULL;
++	int last_implementer = -1, found_part = -1;
++
++	fp = fopen("/proc/cpuinfo", "r");
++	if (fp == NULL) {
++		return -1;
++	}
++
++
++	while(pfmlib_getl(&buffer, &buf_len, fp) != -1){
++
++		/* skip  blank lines */
++		if (*buffer == '\n')
++			continue;
++
++		p = strchr(buffer, ':');
++		if (p == NULL)
++			goto error;
++
++		/*
++		 * p+2: +1 = space, +2= first character
++		 * strlen()-1 gets rid of \n
++		 */
++		*p = '\0';
++		value = p+2;
++
++		value[strlen(value)-1] = '\0';
++
++		if (!strncmp("CPU implementer", buffer, strlen("CPU implementer"))) {
++			last_implementer = strtol(buffer, NULL, 16);
++		}
++
++		if (!strncmp("CPU part", buffer, strlen("CPU part"))) {
++			found_part = strtol(value, NULL, 16);
++
++			if ((last_implementer=implementer) &&
++				(found_part==part)) {
++
++				ret=PFM_SUCCESS;
++
++				break;
++			}
++		}
++	}
++
++error:
++	free(buffer);
++	fclose(fp);
++	return ret;
++}
++
++
+ #else
+ static int
+ pfmlib_getcpuinfo_attr(const char *attr, char *ret_buf, size_t maxlen)
+ {
+ 	return -1;
+ }
++
++int
++pfm_arm_detect_cpu(int implementer, int part)
++{
++	return -1;
++}
+ #endif
+ 
+ static int
+diff --git a/lib/pfmlib_arm_armv8.c b/lib/pfmlib_arm_armv8.c
+index bc1727b..812ff24 100644
+--- a/lib/pfmlib_arm_armv8.c
++++ b/lib/pfmlib_arm_armv8.c
+@@ -206,6 +206,7 @@ pfmlib_pmu_t arm_cortex_a57_support={
+ pfmlib_pmu_t arm_cortex_a53_support={
+ 	.desc			= "ARM Cortex A53",
+ 	.name			= "arm_ac53",
++	.perf_name		= "armv8_cortex_a53",
+ 	.pmu			= PFM_PMU_ARM_CORTEX_A53,
+ 	.pme_count		= LIBPFM_ARRAY_SIZE(arm_cortex_a53_pe),
+ 	.type			= PFM_PMU_TYPE_CORE,
+diff --git a/lib/pfmlib_arm_perf_event.c b/lib/pfmlib_arm_perf_event.c
+index de2396a..003d3c7 100644
+--- a/lib/pfmlib_arm_perf_event.c
++++ b/lib/pfmlib_arm_perf_event.c
+@@ -24,12 +24,39 @@
+ #include <sys/types.h>
+ #include <string.h>
+ #include <stdlib.h>
++#include <limits.h>
+ 
+ /* private headers */
+ #include "pfmlib_priv.h"		/* library private */
+ #include "pfmlib_arm_priv.h"
+ #include "pfmlib_perf_event_priv.h"
+ 
++static int
++find_pmu_type_by_name(const char *name)
++{
++        char filename[PATH_MAX];
++        FILE *fp;
++        int ret, type;
++
++        if (!name)
++                return PFM_ERR_NOTSUPP;
++
++        sprintf(filename, "/sys/bus/event_source/devices/%s/type", name);
++
++        fp = fopen(filename, "r");
++        if (!fp)
++                return PFM_ERR_NOTSUPP;
++
++        ret = fscanf(fp, "%d", &type);
++        if (ret != 1)
++                type = PFM_ERR_NOTSUPP;
++
++        fclose(fp);
++
++        return type;
++}
++
++
+ int
+ pfm_arm_get_perf_encoding(void *this, pfmlib_event_desc_t *e)
+ {
+@@ -53,7 +80,17 @@ pfm_arm_get_perf_encoding(void *this, pfmlib_event_desc_t *e)
+ 		return PFM_ERR_NOTSUPP;
+ 	}
+ 
+-	attr->type = PERF_TYPE_RAW;
++	if (pmu->perf_name) {
++		int type = find_pmu_type_by_name(pmu->perf_name);
++		if (type == PFM_ERR_NOTSUPP) {
++			DPRINT("perf PMU %s, not supported by OS\n", pmu->perf_name);
++		} else {
++			DPRINT("PMU %s perf type=%d\n", pmu->name, type);
++			attr->type = type;
++		}
++	}
++
++//	attr->type = PERF_TYPE_RAW;
+ 	reg.val = e->codes[0];
+ 	/*
+ 	 * suppress the bits which are under the control of perf_events.
+diff --git a/lib/pfmlib_arm_priv.h b/lib/pfmlib_arm_priv.h
+index e3ed78a..1085f7f 100644
+--- a/lib/pfmlib_arm_priv.h
++++ b/lib/pfmlib_arm_priv.h
+@@ -62,6 +62,7 @@ typedef struct {
+ extern pfm_arm_config_t pfm_arm_cfg;
+ 
+ extern int pfm_arm_detect(void *this);
++extern int pfm_arm_detect_cpu(int implementer, int part);
+ extern int pfm_arm_get_encoding(void *this, pfmlib_event_desc_t *e);
+ extern int pfm_arm_get_event_first(void *this);
+ extern int pfm_arm_get_event_next(void *this, int idx);

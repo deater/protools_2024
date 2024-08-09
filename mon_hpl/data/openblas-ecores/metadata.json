@@ -1,0 +1,6 @@
+{
+    "n_runs": 10,
+    "t_samp": 1.0,
+    "cores": "16-24",
+    "settled_temps": "thermal_zone9:350000"
+}

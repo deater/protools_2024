@@ -1,0 +1,148 @@
+diff --git a/README b/README
+index 8728dcd..c3f544f 100644
+--- a/README
++++ b/README
+@@ -77,7 +77,7 @@ The library supports many PMUs. The current version can handle:
+ 		ARMV7 Cortex A8
+ 		ARMV7 Cortex A9
+ 		ARMV7 Cortex A15
+-		ARMV8 Cortex A57, A53
++		ARMV8 Cortex A57, A53, A72
+ 		Applied Micro X-Gene
+ 		Qualcomm Krait
+ 		Fujitsu A64FX
+diff --git a/include/perfmon/pfmlib.h b/include/perfmon/pfmlib.h
+index f38ebbb..bbe427a 100644
+--- a/include/perfmon/pfmlib.h
++++ b/include/perfmon/pfmlib.h
+@@ -812,6 +812,8 @@ typedef enum {
+ 
+ 	PFM_PMU_INTEL_GNR,		/* Intel GraniteRapids core PMU */
+ 
++	PFM_PMU_ARM_CORTEX_A72,		/* ARM Cortex A72 (ARMv8) */
++
+ 	/* MUST ADD NEW PMU MODELS HERE */
+ 
+ 	PFM_PMU_MAX			/* end marker */
+diff --git a/lib/Makefile b/lib/Makefile
+index 2712429..1c8340b 100644
+--- a/lib/Makefile
++++ b/lib/Makefile
+@@ -405,6 +405,7 @@ INC_ARM=pfmlib_arm_priv.h			\
+ 	events/arm_cortex_a15_events.h		\
+ 	events/arm_cortex_a57_events.h		\
+ 	events/arm_cortex_a53_events.h		\
++	events/arm_cortex_a72_events.h		\
+         events/arm_xgene_events.h		\
+ 	events/arm_cavium_tx2_events.h		\
+ 	events/arm_marvell_tx2_unc_events.h	\
+@@ -418,6 +419,7 @@ INC_ARM=pfmlib_arm_priv.h			\
+ INC_ARM64=pfmlib_arm_priv.h			\
+ 	events/arm_cortex_a57_events.h		\
+ 	events/arm_cortex_a53_events.h		\
++	events/arm_cortex_a72_events.h		\
+         events/arm_xgene_events.h		\
+ 	events/arm_cavium_tx2_events.h		\
+ 	events/arm_marvell_tx2_unc_events.h	\
+diff --git a/lib/pfmlib_arm_armv8.c b/lib/pfmlib_arm_armv8.c
+index bc1727b..07e6f7f 100644
+--- a/lib/pfmlib_arm_armv8.c
++++ b/lib/pfmlib_arm_armv8.c
+@@ -35,6 +35,7 @@
+ 
+ #include "events/arm_cortex_a57_events.h"    /* A57 event tables */
+ #include "events/arm_cortex_a53_events.h"    /* A53 event tables */
++#include "events/arm_cortex_a72_events.h"    /* A72 event tables */
+ #include "events/arm_xgene_events.h"         /* Applied Micro X-Gene tables */
+ #include "events/arm_cavium_tx2_events.h"    	/* Marvell ThunderX2 tables */
+ #include "events/arm_marvell_tx2_unc_events.h" 	/* Marvell ThunderX2 PMU tables */
+@@ -76,6 +77,24 @@ pfm_arm_detect_v1(void *this)
+ 	return PFM_ERR_NOTSUPP;
+ }
+ 
++static int
++pfm_arm_detect_cortex_a72(void *this)
++{
++//	int ret;
++
++	return pfm_arm_detect_cpu(0x41,0xd08);
++
++//	ret = pfm_arm_detect(this);
++//	if (ret != PFM_SUCCESS)
++//		return PFM_ERR_NOTSUPP;
++
++//	if ((pfm_arm_cfg.implementer == 0x41) && /* ARM */
++//        (pfm_arm_cfg.part == 0xd08)) { /* Cortex A72 */
++//			return PFM_SUCCESS;
++//	}
++//	return PFM_ERR_NOTSUPP;
++}
++
+ static int
+ pfm_arm_detect_cortex_a57(void *this)
+ {
+@@ -176,6 +195,32 @@ pfm_arm_detect_hisilicon_kunpeng(void *this)
+ 	return PFM_ERR_NOTSUPP;
+ }
+ 
++/* ARM Cortex A72 support */
++pfmlib_pmu_t arm_cortex_a72_support={
++	.desc			= "ARM Cortex A72",
++	.name			= "arm_ac72",
++	.perf_name		= "armv8_cortex_a72",
++	.pmu			= PFM_PMU_ARM_CORTEX_A72,
++	.pme_count		= LIBPFM_ARRAY_SIZE(arm_cortex_a72_pe),
++	.type			= PFM_PMU_TYPE_CORE,
++	.pe			= arm_cortex_a72_pe,
++
++	.pmu_detect		= pfm_arm_detect_cortex_a72,
++	.max_encoding		= 1,
++	.num_cntrs		= 6,
++
++	.get_event_encoding[PFM_OS_NONE] = pfm_arm_get_encoding,
++	 PFMLIB_ENCODE_PERF(pfm_arm_get_perf_encoding),
++	.get_event_first	= pfm_arm_get_event_first,
++	.get_event_next		= pfm_arm_get_event_next,
++	.event_is_valid		= pfm_arm_event_is_valid,
++	.validate_table		= pfm_arm_validate_table,
++	.get_event_info		= pfm_arm_get_event_info,
++	.get_event_attr_info	= pfm_arm_get_event_attr_info,
++	 PFMLIB_VALID_PERF_PATTRS(pfm_arm_perf_validate_pattrs),
++	.get_event_nattrs	= pfm_arm_get_event_nattrs,
++};
++
+ /* ARM Cortex A57 support */
+ pfmlib_pmu_t arm_cortex_a57_support={
+ 	.desc			= "ARM Cortex A57",
+diff --git a/lib/pfmlib_common.c b/lib/pfmlib_common.c
+index c1c0a02..9d4dfd9 100644
+--- a/lib/pfmlib_common.c
++++ b/lib/pfmlib_common.c
+@@ -725,6 +725,7 @@ static pfmlib_pmu_t *pfmlib_pmus[]=
+ 	&arm_hisilicon_kunpeng_sccl7_l3c21_support,
+ 	&arm_hisilicon_kunpeng_sccl7_l3c22_support,
+ 	&arm_hisilicon_kunpeng_sccl7_l3c23_support,
++	&arm_cortex_a72_support,
+ #endif
+ #ifdef CONFIG_PFMLIB_ARCH_ARM64
+ 	&arm_cortex_a57_support,
+@@ -799,6 +800,7 @@ static pfmlib_pmu_t *pfmlib_pmus[]=
+ 	&arm_v1_support,
+ 	&arm_v2_support,
+ 	&arm_hisilicon_kunpeng_support,
++	&arm_cortex_a72_support,
+ #endif
+ 
+ #ifdef CONFIG_PFMLIB_ARCH_S390X
+diff --git a/lib/pfmlib_priv.h b/lib/pfmlib_priv.h
+index 0a877d2..7c8cc57 100644
+--- a/lib/pfmlib_priv.h
++++ b/lib/pfmlib_priv.h
+@@ -829,6 +829,7 @@ extern pfmlib_pmu_t arm_cortex_a9_support;
+ extern pfmlib_pmu_t arm_cortex_a15_support;
+ extern pfmlib_pmu_t arm_1176_support;
+ extern pfmlib_pmu_t arm_qcom_krait_support;
++extern pfmlib_pmu_t arm_cortex_a72_support;
+ extern pfmlib_pmu_t arm_cortex_a57_support;
+ extern pfmlib_pmu_t arm_cortex_a53_support;
+ extern pfmlib_pmu_t arm_xgene_support;

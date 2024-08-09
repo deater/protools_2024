@@ -1,0 +1,16 @@
+These results were gathered on an Orange Pi 800 system running
+Linux orangepi800 5.18.5-rk3399 #3.0.8 SMP PREEMPT Mon Sep 26 15:06:13 CST 2022 aarch64 aarch64 aarch64 GNU/Linux
+
+The data was gathered with the
+	wattsup-fancy.c
+tool that logs power from a WattsUpPro power meter along with temperature
+information.  This tool can be found in this git repo:
+	https://github.com/deater/uarch-configure/tree/master/wattsup
+The version used for the measurements is included here.
+	
+The graphs were generated using the "jgraph" tool by Jim Plank
+
+To separate the columns for plotting, awk is used, something like
+	awk '{print $1-1719435972 " " $2}' hpl.results 
+and to reduce the frequencies something like
+	awk '{print $1-1719435972 " " $2/1000}' hpl.results 

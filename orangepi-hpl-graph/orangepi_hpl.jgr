@@ -1,0 +1,60 @@
+newgraph
+X 6
+Y 5
+
+title font Helvetica fontsize 16 y 14 : OrangePi HPL Performance as More Cores Added
+
+(* legend custom *)
+
+
+
+yaxis size 3 min 0 max 12
+label font Helvetica fontsize 14 : GFLOP/s
+hash_labels font Helvetica fontsize 14
+grid_lines grid_gray 0.25
+mgrid_lines mgrid_gray 0.85
+
+xaxis size 5 min -1 max 9
+(* label font Helvetica fontsize 14 : Time (s) *)
+(* hash_labels font Helvetica fontsize 14 *)
+no_draw_hash_marks no_auto_hash_labels
+hash_labels hjc vjc (* rotate 45 *) font Helvetica fontsize 14
+hash_label at 0 : 1
+hash_label at 1 : 2
+hash_label at 2 : 3
+hash_label at 3 : 4
+hash_label at 5 : 1
+hash_label at 6 : 2
+(* hash_label at 8 : all *)
+
+
+newstring
+vjc hjc font Helvetica fontsize 16 x 1.5 y -2 : Little Cores\
+Only
+
+newstring
+vjc hjc font Helvetica fontsize 16 x 5.5 y -2 : Big Cores\
+Only
+
+newstring
+vjc hjc font Helvetica fontsize 16 x 8 y -1 : All Cores
+
+newcurve marktype xbar marksize 0.9
+color 1.0 0.4 0.0
+pts
+0	3.1749
+1	6.0276
+2	8.3371
+3	10.211
+
+newcurve marktype xbar marksize 0.9
+color 0.0 0.7 0.3
+pts
+5	4.2931
+6	6.54448
+
+newcurve marktype xbar marksize 0.9
+color 0.0 0.3 0.7
+pts
+8	10.347
+
